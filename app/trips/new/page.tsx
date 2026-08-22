@@ -6,18 +6,20 @@ import { Compass, Calendar, MapPin, DollarSign, Users, Sparkles, Plus, Check, Ar
 import { SuggestionCard } from '@/components/SuggestionCard';
 import { AddToTripModal } from '@/components/AddToTripModal';
 import { MOCK_SUGGESTIONS, SuggestionItem } from '@/lib/mockData';
+import { createTripInDb } from '@/lib/services';
 
 export default function NewTripPage() {
   const router = useRouter();
 
   // Form Fields
-  const [tripTitle, setTripTitle] = useState(' Amalfi Riviera & Capri Expedition');
+  const [tripTitle, setTripTitle] = useState('Amalfi Riviera & Capri Expedition');
   const [destination, setDestination] = useState('Positano & Amalfi, Italy');
   const [startDate, setStartDate] = useState('2026-09-10');
   const [endDate, setEndDate] = useState('2026-09-18');
   const [budget, setBudget] = useState(3500);
   const [travelers, setTravelers] = useState(2);
   const [selectedTags, setSelectedTags] = useState<string[]>(['Coastal', 'Culinary']);
+  const [loading, setLoading] = useState(false);
 
   // Selected Suggestions from 2x3 Grid
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>(['sug-1', 'sug-2']);
@@ -33,9 +35,21 @@ export default function NewTripPage() {
     }
   };
 
-  const handleCreateTrip = (e: React.FormEvent) => {
+  const handleCreateTrip = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/trips/trip-1/build');
+    setLoading(true);
+
+    const result = await createTripInDb({
+      name: tripTitle,
+      destination,
+      startDate,
+      endDate,
+      budget,
+    });
+
+    setLoading(false);
+    const targetId = result.id || 'trip-1';
+    router.push(`/trips/${targetId}/build`);
   };
 
   return (
@@ -107,7 +121,7 @@ export default function NewTripPage() {
               </div>
             </div>
 
-            {/* Date Range: Start & End Date */}
+            {/* Date Range */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
@@ -199,10 +213,17 @@ export default function NewTripPage() {
             <div className="pt-4 border-t border-slate-100">
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-coral-500 hover:bg-coral-600 text-white font-semibold text-xs shadow-coral-glow flex items-center justify-center gap-2 transition-all hover:shadow-lg"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-coral-500 hover:bg-coral-600 text-white font-semibold text-xs shadow-coral-glow flex items-center justify-center gap-2 transition-all hover:shadow-lg disabled:opacity-50"
               >
-                <span>Save & Build Detailed Itinerary</span>
-                <ArrowRight className="w-4 h-4" />
+                {loading ? (
+                  <span>Saving to Database...</span>
+                ) : (
+                  <>
+                    <span>Save & Build Detailed Itinerary</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
 
@@ -226,7 +247,6 @@ export default function NewTripPage() {
             </span>
           </div>
 
-          {/* 2x3 Grid of Suggestion Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {MOCK_SUGGESTIONS.map((suggestion) => (
               <SuggestionCard
@@ -240,7 +260,6 @@ export default function NewTripPage() {
 
       </div>
 
-      {/* Add To Trip Modal Dialog */}
       <AddToTripModal
         item={activeModalItem}
         onClose={() => setActiveModalItem(null)}

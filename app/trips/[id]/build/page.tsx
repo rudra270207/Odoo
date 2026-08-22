@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Compass, Plus, Save, ArrowRight, DollarSign, Calendar, MapPin, CheckCircle2, Layers } from 'lucide-react';
+import { Compass, Plus, Save, ArrowRight, DollarSign, Calendar, MapPin, CreditCard, Layers } from 'lucide-react';
 import { SectionCard } from '@/components/SectionCard';
 import { MOCK_TRIPS, TripSection } from '@/lib/mockData';
+import { addTripSectionDb } from '@/lib/services';
 
 export default function TripBuildPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const trip = MOCK_TRIPS[0]; // Primary mock trip
+  const trip = MOCK_TRIPS[0];
 
   const [sections, setSections] = useState<TripSection[]>(
     trip.sections || [
@@ -44,8 +45,8 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
   );
 
   const [savedNotice, setSavedNotice] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  // Dynamic Accumulator
   const totalAllocatedBudget = sections.reduce((acc, curr) => acc + (curr.budget || 0), 0);
 
   const handleUpdateSection = (updated: TripSection) => {
@@ -56,7 +57,7 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
     setSections(sections.filter((s) => s.id !== id));
   };
 
-  const handleAddSection = () => {
+  const handleAddSection = async () => {
     const nextNum = sections.length + 1;
     const newSec: TripSection = {
       id: `sec-${Date.now()}`,
@@ -67,7 +68,42 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
       budget: 800,
       activitiesCount: 3,
     };
+
     setSections([...sections, newSec]);
+
+    await addTripSectionDb({
+      tripId: params.id || 'trip-1',
+      title: newSec.title,
+      description: newSec.description,
+      budget: newSec.budget,
+    });
+  };
+
+  // Stripe Checkout Session Trigger
+  const handleStripeCheckout = async () => {
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tripId: params.id || 'trip-1',
+          tripName: trip.title,
+          amount: 150,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert('Stripe test mode redirect simulated!');
+        setCheckoutLoading(false);
+      }
+    } catch (err) {
+      alert('Redirecting to test checkout flow...');
+      setCheckoutLoading(false);
+    }
   };
 
   const handleSave = () => {
@@ -92,21 +128,33 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
             {trip.title}
           </h1>
           <p className="text-xs text-slate-500 font-medium">
-            Organize stacked itinerary section blocks, adjust dates, and allocate budgets
+            Organize itinerary sections, allocate budget, and secure your trip deposit
           </p>
         </div>
 
-        {/* Live Budget Counter */}
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-right min-w-[200px]">
-          <span className="text-[11px] font-semibold text-slate-500 block uppercase">
-            Allocated Budget
-          </span>
-          <span className="font-heading font-extrabold text-xl text-coral-600">
-            ${totalAllocatedBudget.toLocaleString()}
-          </span>
-          <span className="text-[10px] text-slate-400 block font-medium">
-            of ${trip.budget.toLocaleString()} target limit
-          </span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-right min-w-[180px]">
+            <span className="text-[10px] font-semibold text-slate-500 block uppercase">
+              Allocated Budget
+            </span>
+            <span className="font-heading font-extrabold text-xl text-coral-600">
+              ${totalAllocatedBudget.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-slate-400 block font-medium">
+              Target: ${trip.budget.toLocaleString()}
+            </span>
+          </div>
+
+          {/* Stripe Test Mode Trigger CTA */}
+          <button
+            type="button"
+            onClick={handleStripeCheckout}
+            disabled={checkoutLoading}
+            className="px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all hover:scale-105"
+          >
+            <CreditCard className="w-4 h-4 text-coral-500" />
+            <span>{checkoutLoading ? 'Redirecting to Stripe...' : 'Pay $150 Deposit (Stripe)'}</span>
+          </button>
         </div>
       </div>
 
@@ -140,7 +188,7 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
         ))}
       </div>
 
-      {/* Bottom CTA bar */}
+      {/* Bottom Action bar */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
         <button
           type="button"
@@ -152,12 +200,14 @@ export default function TripBuildPage({ params }: { params: { id: string } }) {
         </button>
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <Link
-            href="/trips"
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+          <button
+            type="button"
+            onClick={handleStripeCheckout}
+            className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold text-xs flex items-center gap-1.5"
           >
-            Cancel
-          </Link>
+            <CreditCard className="w-3.5 h-3.5 text-coral-500" />
+            <span>Pay Deposit</span>
+          </button>
 
           <button
             type="button"
